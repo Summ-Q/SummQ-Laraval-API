@@ -6,7 +6,7 @@ Route::get('/', function () {
     return view('welcome');
 });
 
-Route::prefix('api')->group(function () {
+Route::prefix('my-api')->group(function () {
     Route::get('/tests', function () {
     return response()->json(['message' => 'API is working22!']);
 });
