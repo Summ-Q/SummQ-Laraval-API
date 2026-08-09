@@ -10,6 +10,8 @@ class StudyProgress extends Model {
     /** @use HasFactory<StudyProgressFactory> */
     use HasFactory;
 
+    protected $table = "study_progress";
+
     protected $fillable = [
         'user_id',
         'flashcard_id',
