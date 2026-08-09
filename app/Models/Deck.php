@@ -19,4 +19,9 @@ class Deck extends Model
     {
         return $this->belongsTo(User::class);
     }
+
+    public function flashcards()
+    {
+        return $this->hasMany(Flashcard::class);
+    }
 }
