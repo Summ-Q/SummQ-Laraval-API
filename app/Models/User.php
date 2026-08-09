@@ -36,4 +36,8 @@ class User extends Authenticatable {
     public function reviewLogs(): HasMany {
         return $this->hasMany(ReviewLog::class);
     }
+
+    public function studyProgress(): HasMany {
+        return $this->hasMany(StudyProgress::class);
+    }
 }
