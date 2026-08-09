@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use Database\Factories\FlashcardFactory;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Flashcard extends Model
-{
-    /** @use HasFactory<\Database\Factories\FlashcardFactory> */
+class Flashcard extends Model {
+    /** @use HasFactory<FlashcardFactory> */
     use HasFactory;
 
     protected $fillable = [
@@ -22,8 +22,7 @@ class Flashcard extends Model
         'answer' => 'string',
     ];
 
-    public function deck()
-    {
+    public function deck() {
         return $this->belongsTo(Deck::class);
     }
 }

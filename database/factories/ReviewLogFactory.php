@@ -2,14 +2,15 @@
 
 namespace Database\Factories;
 
-use App\Models\Deck;
 use App\Models\Flashcard;
+use App\Models\ReviewLog;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends Factory<Flashcard>
+ * @extends Factory<ReviewLog>
  */
-class FlashcardFactory extends Factory {
+class ReviewLogFactory extends Factory {
     /**
      * Define the model's default state.
      *
@@ -17,9 +18,9 @@ class FlashcardFactory extends Factory {
      */
     public function definition(): array {
         return [
-            'deck_id' => Deck::factory(),
-            'question' => fake()->sentence(),
-            'answer' => fake()->sentence(),
+            'user_id' => User::factory(),
+            'flashcard_id' => Flashcard::factory(),
+            'score' => fake()->numberBetween(0, 100),
         ];
     }
 }

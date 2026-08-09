@@ -9,10 +9,11 @@ return new class extends Migration {
      * Run the migrations.
      */
     public function up(): void {
-        Schema::create('decks', function (Blueprint $table) {
+        Schema::create('review_logs', function (Blueprint $table) {
             $table->id();
-            $table->foreignId('user_id')->constrained()->cascadeOnDelete();
-            $table->string('name');
+            $table->foreignId('user_id')->constrained()->onDelete('cascade');
+            $table->foreignId('flashcard_id')->constrained()->onDelete('cascade');
+            $table->integer('score')->unsigned()->nullable();
             $table->timestamps();
         });
     }
@@ -21,6 +22,6 @@ return new class extends Migration {
      * Reverse the migrations.
      */
     public function down(): void {
-        Schema::dropIfExists('decks');
+        Schema::dropIfExists('review_logs');
     }
 };

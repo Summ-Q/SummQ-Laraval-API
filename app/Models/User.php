@@ -29,8 +29,11 @@ class User extends Authenticatable {
         ];
     }
 
-    public function decks(): HasMany
-    {
+    public function decks(): HasMany {
         return $this->hasMany(Deck::class);
+    }
+
+    public function reviewLogs(): HasMany {
+        return $this->hasMany(ReviewLog::class);
     }
 }
