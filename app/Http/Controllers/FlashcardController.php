@@ -3,12 +3,13 @@
 namespace App\Http\Controllers;
 
 use App\Models\Deck;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
 
-class FlashcardController extends Controller
-{
+class FlashcardController extends Controller {
     public function index(Deck $deck) {
         Gate::authorize('access-deck', $deck);
 
@@ -18,8 +19,8 @@ class FlashcardController extends Controller
             'message' => 'Cards retrieved successfully.',
             'data' => [
                 'deck_id' => (int) $deck->id,
-                'cards' => $cards
-            ]
+                'cards' => $cards,
+            ],
         ]);
     }
 
@@ -27,18 +28,18 @@ class FlashcardController extends Controller
         Gate::authorize('access-deck', $deck);
 
         $request->validate([
-            'notes' => ['nullable','string'],
-            'file' => ['nullable','file','mimes:pdf', 'max:10240'], // 10MB
+            'notes' => ['nullable', 'string'],
+            'file' => ['nullable', 'file', 'mimes:pdf', 'max:10240'], // 10MB
         ]);
 
-        if (!$request->filled('notes') && !$request->hasFile('file')) {
+        if (! $request->filled('notes') && ! $request->hasFile('file')) {
             return response()->json(['message' => 'Either notes or a PDF file must be provided.'], 400);
         }
 
-        $pythonApiUrl = env('PYTHON_API_URL') . '/ai/generate-cards';
-        $internalToken = env('INTERNAL_API_TOKEN');
+        $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ai/generate-cards';
+        $internalToken = config('services.python_api.internal_token');
 
-        //FOR LOCAL TESTING
+        // FOR LOCAL TESTING
         // Http::fake([
         //     $pythonApiUrl => Http::response([
         //         'status' => 'success',
@@ -48,21 +49,27 @@ class FlashcardController extends Controller
         //         ]
         //     ], 200)
         // ]);
-        //END LOCAL TESTING
+        // END LOCAL TESTING
 
-        $pendingRequest = Http::withHeaders([
-            'X-Internal-Token' => $internalToken
-        ]);
+        $pendingRequest = Http::withHeaders(['X-Internal-Token' => $internalToken])
+            ->acceptJson()
+            ->timeout(60); // AI generation might need up to 60 seconds
 
-        if ($request->hasFile('file')) {
-            $file = $request->file('file');
-            
-            $response = $pendingRequest->attach('file', file_get_contents($file->path()), $file->getClientOriginalName())->post($pythonApiUrl);
-            
-        } else {
-            $response = $pendingRequest->post($pythonApiUrl, [
-                'text' => $request->input('notes')
-            ]);
+        try {
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+                $response = $pendingRequest->attach(
+                    'file',
+                    fopen($file->path(), 'r'),
+                    $file->getClientOriginalName()
+                )->post($pythonApiUrl);
+            } else {
+                $response = $pendingRequest->post($pythonApiUrl, [
+                    'text' => $request->input('notes'),
+                ]);
+            }
+        } catch (ConnectionException $e) {
+            return response()->json(['message' => 'AI generation service is currently unavailable.'], 503);
         }
 
         if ($response->failed()) {
@@ -71,20 +78,30 @@ class FlashcardController extends Controller
 
         $generatedCards = $response->json('cards');
 
-        $createdCards = [];
-        foreach ($generatedCards as $cardData) {
-            $createdCards[] = $deck->flashcards()->create([
-                'question' => $cardData['question'],
-                'answer' => $cardData['answer'],
-            ]);
+        if (! is_array($generatedCards)) {
+            return response()->json(['message' => 'Invalid response from AI service.'], 502);
         }
+
+        $createdCards = DB::transaction(function () use ($deck, $generatedCards) {
+            $cards = [];
+            foreach ($generatedCards as $cardData) {
+                if (isset($cardData['question'], $cardData['answer'])) {
+                    $cards[] = $deck->cards()->create([
+                        'question' => $cardData['question'],
+                        'answer' => $cardData['answer'],
+                    ]);
+                }
+            }
+
+            return $cards;
+        });
 
         return response()->json([
             'message' => 'Cards generated successfully',
             'data' => [
                 'deck_id' => (int) $deck->id,
-                'cards' => $createdCards
-            ]
+                'cards' => $createdCards,
+            ],
         ]);
     }
 }
