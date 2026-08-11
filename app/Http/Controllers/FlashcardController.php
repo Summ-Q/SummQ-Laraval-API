@@ -86,7 +86,7 @@ class FlashcardController extends Controller {
             $cards = [];
             foreach ($generatedCards as $cardData) {
                 if (isset($cardData['question'], $cardData['answer'])) {
-                    $cards[] = $deck->cards()->create([
+                    $cards[] = $deck->flashcards()->create([
                         'question' => $cardData['question'],
                         'answer' => $cardData['answer'],
                     ]);
