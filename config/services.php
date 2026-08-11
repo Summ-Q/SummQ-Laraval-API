@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'python_api' => [
+        'url' => env('PYTHON_API_URL'),
+        'internal_token' => env('INTERNAL_API_TOKEN'),
+    ],
+
 ];
