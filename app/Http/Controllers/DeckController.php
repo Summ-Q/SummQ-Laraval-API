@@ -38,8 +38,7 @@ class DeckController extends Controller {
     }
 
     // To Delete a Deck (DELETE /api/decks/{deck_id})
-    public function destroy(Request $request, $id) {
-        $deck = $request->user()->decks()->findOrFail($id);
+    public function destroy(Request $request, Deck $deck) {
         $deck->delete();
         
         return response()->json([
