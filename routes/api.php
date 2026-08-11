@@ -2,12 +2,9 @@
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\FlashcardController;
+use App\Http\Controllers\DeckController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
 
 Route::get('/test', function () {
     return response()->json(['message' => 'API is working!']);
@@ -28,4 +25,8 @@ Route::middleware('auth:sanctum')->group(function () {
         ->missing(function () {
             return response()->json(['message' => 'Record not found.'], 404);
         });
+    
+    Route::get('/decks', [DeckController::class, 'index']);
+    Route::post('/decks', [DeckController::class, 'store']);
+    Route::delete('/decks/{deck_id}', [DeckController::class, 'destroy']);
 });
