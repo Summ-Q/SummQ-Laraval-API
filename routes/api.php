@@ -25,5 +25,8 @@ Route::middleware('auth:sanctum')->group(function () {
             return response()->json(['message' => 'Record not found.'], 404);
         });
 
-    Route::post('/decks/{deck}/generate', [FlashcardController::class, 'generate']);
+    Route::post('/decks/{deck}/generate', [FlashcardController::class, 'generate'])
+        ->missing(function () {
+            return response()->json(['message' => 'Record not found.'], 404);
+        });
 });
