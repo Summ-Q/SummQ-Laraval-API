@@ -1,0 +1,90 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Models\Deck;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
+
+class FlashcardController extends Controller
+{
+    public function index(Deck $deck) {
+        Gate::authorize('access-deck', $deck);
+
+        $cards = $deck->flashcards()->get();
+
+        return response()->json([
+            'message' => 'Cards retrieved successfully.',
+            'data' => [
+                'deck_id' => (int) $deck->id,
+                'cards' => $cards
+            ]
+        ]);
+    }
+
+    public function generate(Request $request, Deck $deck) {
+        Gate::authorize('access-deck', $deck);
+
+        $request->validate([
+            'notes' => ['nullable','string'],
+            'file' => ['nullable','file','mimes:pdf', 'max:10240'], // 10MB
+        ]);
+
+        if (!$request->filled('notes') && !$request->hasFile('file')) {
+            return response()->json(['message' => 'Either notes or a PDF file must be provided.'], 400);
+        }
+
+        $pythonApiUrl = env('PYTHON_API_URL') . '/ai/generate-cards';
+        $internalToken = env('INTERNAL_API_TOKEN');
+
+        //FOR LOCAL TESTING
+        // Http::fake([
+        //     $pythonApiUrl => Http::response([
+        //         'status' => 'success',
+        //         'cards' => [
+        //             ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
+        //             ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
+        //         ]
+        //     ], 200)
+        // ]);
+        //END LOCAL TESTING
+
+        $pendingRequest = Http::withHeaders([
+            'X-Internal-Token' => $internalToken
+        ]);
+
+        if ($request->hasFile('file')) {
+            $file = $request->file('file');
+            
+            $response = $pendingRequest->attach('file', file_get_contents($file->path()), $file->getClientOriginalName())->post($pythonApiUrl);
+            
+        } else {
+            $response = $pendingRequest->post($pythonApiUrl, [
+                'text' => $request->input('notes')
+            ]);
+        }
+
+        if ($response->failed()) {
+            return response()->json(['message' => 'Failed to generate flashcards.'], 500);
+        }
+
+        $generatedCards = $response->json('cards');
+
+        $createdCards = [];
+        foreach ($generatedCards as $cardData) {
+            $createdCards[] = $deck->flashcards()->create([
+                'question' => $cardData['question'],
+                'answer' => $cardData['answer'],
+            ]);
+        }
+
+        return response()->json([
+            'message' => 'Cards generated successfully',
+            'data' => [
+                'deck_id' => (int) $deck->id,
+                'cards' => $createdCards
+            ]
+        ]);
+    }
+}
