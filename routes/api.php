@@ -3,6 +3,8 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeckController;
 use App\Http\Controllers\FlashcardController;
+use App\Http\Controllers\StudyController;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/test', function () {
@@ -24,8 +26,11 @@ Route::middleware('auth:sanctum')->group(function () {
         ->missing(function () {
             return response()->json(['message' => 'Record not found.'], 404);
         });
-
+    
     Route::get('/decks', [DeckController::class, 'index']);
     Route::post('/decks', [DeckController::class, 'store']);
     Route::delete('/decks/{deck_id}', [DeckController::class, 'destroy']);
+
+    Route::get('/decks/{deck_id}/study', [StudyController::class, 'index']);
+    Route::post('/reviews/{flashcard_id}', [StudyController::class, 'logReview']);
 });
