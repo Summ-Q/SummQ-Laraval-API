@@ -49,7 +49,7 @@ class StudyController extends Controller {
             $daysToAdd = $request->input('days_to_add');
 
             if ($daysToAdd === null) {
-                $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ai/review-interval';
+                $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ds/review-interval';
                 $internalToken = config('services.python_api.internal_token');
 
                 // FOR LOCAL TESTING
