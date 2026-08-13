@@ -29,8 +29,8 @@ Route::middleware('auth:sanctum')->group(function () {
     
     Route::get('/decks', [DeckController::class, 'index']);
     Route::post('/decks', [DeckController::class, 'store']);
-    Route::delete('/decks/{deck_id}', [DeckController::class, 'destroy']);
+    Route::delete('/decks/{deck}', [DeckController::class, 'destroy']);
 
-    Route::get('/decks/{deck_id}/study', [StudyController::class, 'index']);
-    Route::post('/reviews/{flashcard_id}', [StudyController::class, 'logReview']);
+    Route::get('/decks/{deck}/study', [StudyController::class, 'index']);
+    Route::post('/reviews/{flashcard}', [StudyController::class, 'logReview']);
 });

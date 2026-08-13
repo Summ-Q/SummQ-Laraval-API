@@ -15,7 +15,7 @@ class StudyController extends Controller {
     public function index(Request $request, Deck $deck) {
         Gate::authorize('access-deck', $deck);
 
-        $flashcards = $deck->flashcards()->select('deck_id', 'question', 'answer')->get();
+        $flashcards = $deck->flashcards()->select('id', 'deck_id', 'question', 'answer')->get();
         return response()->json([
             'message' => 'Flashcards retrieved successfully.',
             'data' => [
