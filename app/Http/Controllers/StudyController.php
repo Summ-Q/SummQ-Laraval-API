@@ -6,9 +6,11 @@ use App\Models\Deck;
 use App\Models\Flashcard;
 use App\Models\ReviewLog;
 use App\Models\StudyProgress;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Http;
 
 class StudyController extends Controller {
     // GET /api/decks/{deck}/study
@@ -28,7 +30,8 @@ class StudyController extends Controller {
     // POST /api/reviews/{flashcard}
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'in:0,1']
+            'score' => ['required', 'integer', 'in:0,1'],
+            'days_to_add' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $flashcard->loadMissing('deck');
@@ -43,9 +46,49 @@ class StudyController extends Controller {
                 'score' => $validated['score'],
             ]);
 
-            // if the score is 1, then don't show it for ahhh 3 days, else if 0 then show it to them tomorrow
-            $daysToAdd = $validated['score'] === 1 ? 3 : 1;
-            $nextDue = $now->copy()->addDays($daysToAdd);
+            $daysToAdd = $request->input('days_to_add');
+
+            if ($daysToAdd === null) {
+                $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ai/review-interval';
+                $internalToken = config('services.python_api.internal_token');
+
+                // FOR LOCAL TESTING
+                // Http::fake([
+                //     $pythonApiUrl => Http::response([
+                //         'status' => 'success',
+                //         'days_to_add' => 5,
+                //     ], 200)
+                // ]);
+                // END LOCAL TESTING
+
+                $pendingRequest = Http::withHeaders(['X-Internal-Token' => $internalToken])
+                    ->acceptJson()
+                    ->timeout(60);
+
+                try {
+                    $response = $pendingRequest->post($pythonApiUrl, [
+                        'score' => $validated['score'],
+                        'question' => $flashcard->question,
+                        'answer' => $flashcard->answer,
+                    ]);
+
+                    if ($response->successful()) {
+                        $apiDaysToAdd = $response->json('days_to_add');
+
+                        if (is_numeric($apiDaysToAdd) && (int) $apiDaysToAdd >= 0) {
+                            $daysToAdd = (int) $apiDaysToAdd;
+                        }
+                    }
+                } catch (ConnectionException $e) {
+                    return response()->json(['message' => 'Review scheduling service is unavailable.'], 503);
+                }
+            }
+
+            if (! is_numeric($daysToAdd) || (int) $daysToAdd < 0) {
+                return response()->json(['message' => 'days_to_add is required and it can\'t be a non-negative integer.'], 422);
+            }
+
+            $nextDue = $now->copy()->addDays((int) $daysToAdd);
 
             $progress = StudyProgress::firstOrNew([
                 'user_id' => $request->user()->id,
