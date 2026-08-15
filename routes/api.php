@@ -3,6 +3,7 @@
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\DeckController;
 use App\Http\Controllers\FlashcardController;
+use App\Http\Controllers\StudyController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/test', function () {
@@ -27,5 +28,8 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/decks', [DeckController::class, 'index']);
     Route::post('/decks', [DeckController::class, 'store']);
-    Route::delete('/decks/{deck_id}', [DeckController::class, 'destroy']);
+    Route::delete('/decks/{deck}', [DeckController::class, 'destroy']);
+
+    Route::get('/decks/{deck}/study', [StudyController::class, 'index']);
+    Route::post('/reviews/{flashcard}', [StudyController::class, 'logReview']);
 });
