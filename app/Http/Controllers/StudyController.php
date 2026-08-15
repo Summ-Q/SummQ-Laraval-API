@@ -17,11 +17,13 @@ class StudyController extends Controller {
     public function index(Request $request, Deck $deck) {
         Gate::authorize('access-deck', $deck);
 
-        $flashcards = $deck->flashcards()->select('id', 'deck_id', 'question', 'answer')->get();
+        $flashcards = $deck->flashcards()->dueForUser($request->user()->id)->get();
+
         return response()->json([
-            'message' => 'Flashcards retrieved successfully.',
+            'message' => 'Study session loaded successfully.',
             'data' => [
                 'deck_id' => (int) $deck->id,
+                'due_count' => $flashcards->count(),
                 'flashcards' => $flashcards,
             ],
         ], 200);
@@ -31,79 +33,43 @@ class StudyController extends Controller {
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
             'score' => ['required', 'integer', 'in:0,1'],
-            'days_to_add' => ['nullable', 'integer', 'min:0'],
         ]);
 
         $flashcard->loadMissing('deck');
         Gate::authorize('access-deck', $flashcard->deck);
 
-        $progress = DB::transaction(function () use ($request, $flashcard, $validated) {
+        $daysToAdd = $this->fetchReviewIntervalFromDS($validated['score'], $flashcard);
+
+        if ($daysToAdd === null) {
+            return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
+        }
+
+        $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd) {
             $now = now();
+            $userId = $request->user()->id;
 
             ReviewLog::create([
-                'user_id' => $request->user()->id,
+                'user_id' => $userId,
                 'flashcard_id' => $flashcard->id,
                 'score' => $validated['score'],
             ]);
 
-            $daysToAdd = $request->input('days_to_add');
-
-            if ($daysToAdd === null) {
-                $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ds/review-interval';
-                $internalToken = config('services.python_api.internal_token');
-
-                // FOR LOCAL TESTING
-                // Http::fake([
-                //     $pythonApiUrl => Http::response([
-                //         'status' => 'success',
-                //         'days_to_add' => 5,
-                //     ], 200)
-                // ]);
-                // END LOCAL TESTING
-
-                $pendingRequest = Http::withHeaders(['X-Internal-Token' => $internalToken])
-                    ->acceptJson()
-                    ->timeout(60);
-
-                try {
-                    $response = $pendingRequest->post($pythonApiUrl, [
-                        'score' => $validated['score'],
-                        'question' => $flashcard->question,
-                        'answer' => $flashcard->answer,
-                    ]);
-
-                    if ($response->successful()) {
-                        $apiDaysToAdd = $response->json('days_to_add');
-
-                        if (is_numeric($apiDaysToAdd) && (int) $apiDaysToAdd >= 0) {
-                            $daysToAdd = (int) $apiDaysToAdd;
-                        }
-                    }
-                } catch (ConnectionException $e) {
-                    return response()->json(['message' => 'Review scheduling service is unavailable.'], 503);
-                }
-            }
-
-            if (! is_numeric($daysToAdd) || (int) $daysToAdd < 0) {
-                return response()->json(['message' => 'days_to_add is required and it can\'t be a non-negative integer.'], 422);
-            }
-
-            $nextDue = $now->copy()->addDays((int) $daysToAdd);
-
             $progress = StudyProgress::firstOrNew([
-                'user_id' => $request->user()->id,
+                'user_id' => $userId,
                 'flashcard_id' => $flashcard->id,
             ]);
 
             $previousCount = (int) ($progress->review_count ?? 0);
             $previousAverage = (float) ($progress->average_score ?? 0);
+
             $newCount = $previousCount + 1;
             $newAverage = (($previousAverage * $previousCount) + $validated['score']) / $newCount;
 
             $progress->review_count = $newCount;
             $progress->average_score = round($newAverage, 2);
             $progress->last_reviewed_at = $now;
-            $progress->next_review_due_at = $nextDue;
+            $progress->next_review_due_at = $now->copy()->addDays($daysToAdd);
+
             $progress->save();
 
             return $progress;
@@ -116,7 +82,41 @@ class StudyController extends Controller {
                 'flashcard_id' => $progress->flashcard_id,
                 'average_score' => $progress->average_score,
                 'next_review_due_at' => $progress->next_review_due_at,
-            ]
+            ],
         ], 200);
+    }
+
+    private function fetchReviewIntervalFromDS(int $score, Flashcard $flashcard): ?int {
+        $apiUrlConfig = config('services.python_api.url');
+        $internalToken = config('services.python_api.internal_token');
+
+        if (! $apiUrlConfig || ! $internalToken) {
+            return null;
+        }
+
+        $pythonApiUrl = rtrim($apiUrlConfig, '/').'/ds/review-interval';
+
+        try {
+            $response = Http::withHeaders(['X-Internal-Token' => $internalToken])
+                ->acceptJson()
+                ->timeout(20)
+                ->post($pythonApiUrl, [
+                    'score' => $score,
+                    'question' => $flashcard->question,
+                    'answer' => $flashcard->answer,
+                ]);
+
+            if ($response->successful()) {
+                $apiDaysToAdd = $response->json('days_to_add');
+
+                if (is_numeric($apiDaysToAdd) && (int) $apiDaysToAdd >= 0) {
+                    return (int) $apiDaysToAdd;
+                }
+            }
+        } catch (ConnectionException $e) {
+            // Fails silently here and returns null to trigger the 502 in the main controller
+        }
+
+        return null;
     }
 }
