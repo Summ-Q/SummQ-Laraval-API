@@ -32,19 +32,21 @@ class StudyController extends Controller {
     // POST /api/reviews/{flashcard}
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'in:0,1'],
+            'score' => ['required', 'integer', 'in:1,4'],
         ]);
 
         $flashcard->loadMissing('deck');
         Gate::authorize('access-deck', $flashcard->deck);
 
-        $daysToAdd = $this->fetchReviewIntervalFromDS($validated['score'], $flashcard);
+        $studyProgress = $flashcard->studyProgress()->where('user_id', $request->user()->id)->first();
+
+        $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
 
         if ($daysToAdd === null) {
             return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
         }
 
-        $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd) {
+        $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd, $studyProgress) {
             $now = now();
             $userId = $request->user()->id;
 
@@ -54,25 +56,20 @@ class StudyController extends Controller {
                 'score' => $validated['score'],
             ]);
 
-            $progress = StudyProgress::firstOrNew([
-                'user_id' => $userId,
-                'flashcard_id' => $flashcard->id,
-            ]);
-
-            $previousCount = (int) ($progress->review_count ?? 0);
-            $previousAverage = (float) ($progress->average_score ?? 0);
+            $previousCount = (int) ($studyProgress->review_count ?? 0);
+            $previousAverage = (float) ($studyProgress->average_score ?? 0);
 
             $newCount = $previousCount + 1;
             $newAverage = (($previousAverage * $previousCount) + $validated['score']) / $newCount;
 
-            $progress->review_count = $newCount;
-            $progress->average_score = round($newAverage, 2);
-            $progress->last_reviewed_at = $now;
-            $progress->next_review_due_at = $now->copy()->addDays($daysToAdd);
+            $studyProgress->review_count = $newCount;
+            $studyProgress->average_score = round($newAverage, 2);
+            $studyProgress->last_reviewed_at = $now;
+            $studyProgress->next_review_due_at = $now->copy()->addDays($daysToAdd);
 
-            $progress->save();
+            $studyProgress->save();
 
-            return $progress;
+            return $studyProgress;
         });
 
         return response()->json([
@@ -86,7 +83,7 @@ class StudyController extends Controller {
         ], 200);
     }
 
-    private function fetchReviewIntervalFromDS(int $score, Flashcard $flashcard): ?int {
+    private function fetchReviewIntervalFromDS(?StudyProgress $studyProgress = null): ?int {
         $apiUrlConfig = config('services.python_api.url');
         $internalToken = config('services.python_api.internal_token');
 
@@ -96,15 +93,21 @@ class StudyController extends Controller {
 
         $pythonApiUrl = rtrim($apiUrlConfig, '/').'/ds/review-interval';
 
+        $payload = [];
+
+        if ($studyProgress) {
+            $payload['avg_score'] = (float) ($studyProgress->average_score ?? 0);
+            $payload['past_reviews_count'] = (int) ($studyProgress->review_count ?? 0);
+            $payload['days_since_last_review'] = $studyProgress->last_reviewed_at
+                ? max(0, (int) now()->diffInDays($studyProgress->last_reviewed_at))
+                : 0;
+        }
+
         try {
             $response = Http::withHeaders(['X-Internal-Token' => $internalToken])
                 ->acceptJson()
                 ->timeout(20)
-                ->post($pythonApiUrl, [
-                    'score' => $score,
-                    'question' => $flashcard->question,
-                    'answer' => $flashcard->answer,
-                ]);
+                ->post($pythonApiUrl, $payload);
 
             if ($response->successful()) {
                 $apiDaysToAdd = $response->json('days_to_add');

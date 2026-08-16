@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Deck;
+use App\Models\Flashcard;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -86,10 +87,14 @@ class FlashcardController extends Controller {
             $cards = [];
             foreach ($generatedCards as $cardData) {
                 if (isset($cardData['question'], $cardData['answer'])) {
-                    $cards[] = $deck->flashcards()->create([
+                    $flashcard = $deck->flashcards()->create([
                         'question' => $cardData['question'],
                         'answer' => $cardData['answer'],
                     ]);
+
+                    $this->createStudyProgressForCard($flashcard, $deck->user_id);
+
+                    $cards[] = $flashcard;
                 }
             }
 
@@ -102,6 +107,16 @@ class FlashcardController extends Controller {
                 'deck_id' => (int) $deck->id,
                 'cards' => $createdCards,
             ],
+        ]);
+    }
+
+    private function createStudyProgressForCard(Flashcard $flashcard, int $userId): void {
+        $flashcard->studyProgress()->create([
+            'user_id' => $userId,
+            'review_count' => 0,
+            'average_score' => 0.0,
+            'last_reviewed_at' => null,
+            'next_review_due_at' => now(),
         ]);
     }
 }
