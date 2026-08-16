@@ -27,6 +27,14 @@ class Flashcard extends Model {
         return $this->belongsTo(Deck::class);
     }
 
+    public function studyProgress() {
+        return $this->hasOne(StudyProgress::class);
+    }
+
+    public function reviewLogs() {
+        return $this->hasMany(ReviewLog::class);
+    }
+
     public function scopeDueForUser(Builder $query, int $userId): Builder {
         return $query->select('flashcards.id', 'flashcards.deck_id', 'flashcards.question', 'flashcards.answer')
             ->leftJoin('study_progress', function ($join) use ($userId) {
