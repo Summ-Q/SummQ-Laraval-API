@@ -32,8 +32,10 @@ class StudyController extends Controller {
     // POST /api/reviews/{flashcard}
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'in:1,2,3,4'],
+            'score' => ['required', 'numeric', 'between:1,4'],
         ]);
+
+        $validated['score'] = (int) $validated['score'];
 
         $flashcard->loadMissing('deck');
         Gate::authorize('access-deck', $flashcard->deck);
