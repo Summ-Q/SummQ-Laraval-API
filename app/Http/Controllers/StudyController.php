@@ -32,7 +32,7 @@ class StudyController extends Controller {
     // POST /api/reviews/{flashcard}
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'in:1,4'],
+            'score' => ['required', 'integer', 'in:1,2,3,4'],
         ]);
 
         $flashcard->loadMissing('deck');
@@ -40,11 +40,12 @@ class StudyController extends Controller {
 
         $studyProgress = $flashcard->studyProgress()->where('user_id', $request->user()->id)->first();
 
-        $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
+        // $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
+        $daysToAdd = $validated['score'] === 1 ? 1 : 3; // For now, just use a simple rule: 1 = 1 day, 4 = 3 days
 
-        if ($daysToAdd === null) {
-            return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
-        }
+        // if ($daysToAdd === null) {
+        //     return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
+        // }
 
         $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd, $studyProgress) {
             $now = now();
