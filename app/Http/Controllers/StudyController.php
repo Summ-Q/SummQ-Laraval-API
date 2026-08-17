@@ -32,7 +32,7 @@ class StudyController extends Controller {
     // POST /api/reviews/{flashcard}
     public function logReview(Request $request, Flashcard $flashcard) {
         $validated = $request->validate([
-            'score' => ['required', 'integer', 'in:1,2,3,4'],
+            'score' => ['required', 'in:1,2,3,4'],
         ]);
 
         $flashcard->loadMissing('deck');
