@@ -41,15 +41,15 @@ class FlashcardController extends Controller {
         $internalToken = config('services.python_api.internal_token');
 
         // FOR LOCAL TESTING
-        // Http::fake([
-        //     $pythonApiUrl => Http::response([
-        //         'status' => 'success',
-        //         'cards' => [
-        //             ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
-        //             ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
-        //         ]
-        //     ], 200)
-        // ]);
+        Http::fake([
+            $pythonApiUrl => Http::response([
+                'status' => 'success',
+                'cards' => [
+                    ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
+                    ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
+                ]
+            ], 200)
+        ]);
         // END LOCAL TESTING
 
         $pendingRequest = Http::withHeaders(['X-Internal-Token' => $internalToken])
