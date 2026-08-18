@@ -1,58 +1,73 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# SummQ Laravel API
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+The SummQ API is the backend infrastructure for the SummQ mobile application. It handles user authentication, flashcard generation, and spaced-repetition study logging.
 
-## About Laravel
+## 1. Overview & App Flow
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+* The Flutter frontend authenticates requests via Laravel Sanctum.
+* Users create study decks or upload PDF files.
+* The API passes the PDFs or text notes to an internal Python AI engine to generate flashcards.
+* During study sessions, the API logs review scores (1-4) and fetches the next review interval from a Python Data Science model.
+* The calculated intervals and progress are updated and stored in the PostgreSQL database.
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## 2. Tech Stack & Libraries
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+* Laravel 11
+* PostgreSQL (hosted on Supabase)
+* Laravel Sanctum (Token-based authentication)
+* Laravel HTTP Client / Guzzle (Internal microservice communication)
+* Deployed on Vercel (Serverless PHP)
 
-## Learning Laravel
+## 3. Directory Structure
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+* `app/Http/Controllers`: Contains the Auth, Deck, Flashcard, and Study controllers.
+* `app/Models`: Contains the Deck, Flashcard, StudyProgress, and ReviewLog data models.
+* `routes/api.php`: Defines the exposed endpoints and Sanctum middleware groups.
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+## 4. Local Installation & Setup
 
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+Clone the repository and install the PHP dependencies:
 
 ```bash
-composer require laravel/boost --dev
-
-php artisan boost:install
+git clone https://github.com/Summ-Q/SummQ-Laraval-API.git
+cd summq-laravel-api
+composer install
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+Set up your environment variables and application key:
 
-## Contributing
+```bash
+cp .env.example .env
+php artisan key:generate
+```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+Configure your `.env` file with your local or remote Supabase credentials. Use the Session pooler (port 5432) for local development to maintain a persistent connection.
 
-## Code of Conduct
+Run the database migrations and start the local server:
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+```bash
+php artisan migrate
+php artisan serve
+```
 
-## Security Vulnerabilities
+## 5. Deployment Notes (Vercel & Supabase)
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+Vercel operates on a strictly read-only filesystem. You must provide specific environment variables in the Vercel dashboard to map all framework caches (config, routes, views, packages) to the temporary `/tmp` directory.
 
-## License
+Supabase utilizes PgBouncer for connection pooling (port 6543), which operates in Transaction Mode. This mode drops standard prepared statements. To prevent database transaction failures during `DB::transaction()` calls, you must explicitly enable emulated prepares in `config/database.php`:
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+```php
+'options' => [
+    \PDO::ATTR_EMULATE_PREPARES => true,
+],
+```
+
+## 6. Usage / Core Endpoints
+
+All protected routes require a valid Sanctum Bearer Token in the `Authorization` header and the `Accept: application/json` header.
+
+* POST `/register` & `/login` - Authenticates the user and returns a Bearer Token.
+* GET `/decks` & POST `/decks` - Retrieves user decks or creates a new deck.
+* POST `/decks/{deck}/generate` - Accepts a PDF file or text string and returns AI-generated flashcards.
+* GET `/decks/{deck}/study` - Retrieves a queue of flashcards currently due for review.
+* POST `/reviews/{flashcard}` - Accepts a study score (1-4), records the review, and calculates the next due date.
