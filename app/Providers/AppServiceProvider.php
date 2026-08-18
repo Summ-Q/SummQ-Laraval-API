@@ -5,6 +5,8 @@ namespace App\Providers;
 use App\Models\Deck;
 use App\Models\User;
 use Illuminate\Auth\Access\Response;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\ServiceProvider;
 
@@ -24,6 +26,18 @@ class AppServiceProvider extends ServiceProvider {
             return $user->id === $deck->user_id
                 ? Response::allow()
                 : Response::deny('Unauthorized access to this deck.');
+        });
+
+        RateLimiter::for('auth-attempts', function ($request) {
+            return Limit::perMinute(5)->by($request->ip());
+        });
+
+        RateLimiter::for('ai-generation', function ($request) {
+            return Limit::perMinute(3)->by($request->user()->id);
+        });
+
+        RateLimiter::for('study-activity', function ($request) {
+            return Limit::perMinute(100)->by($request->user()->id);
         });
     }
 }
