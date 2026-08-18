@@ -11,6 +11,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class StudyController extends Controller {
     // GET /api/decks/{deck}/study
@@ -40,7 +41,10 @@ class StudyController extends Controller {
         $flashcard->loadMissing('deck');
         Gate::authorize('access-deck', $flashcard->deck);
 
-        $studyProgress = $flashcard->studyProgress()->where('user_id', $request->user()->id)->first();
+        $studyProgress = $flashcard->studyProgress()->firstOrCreate(
+            ['user_id' => $request->user()->id],
+            ['review_count' => 0, 'average_score' => 0]
+        );
 
         // $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
         $daysToAdd = $validated['score'] === 1 ? 1 : 3; // For now, just use a simple rule: 1 = 1 day, 4 = 3 days
@@ -49,31 +53,41 @@ class StudyController extends Controller {
         //     return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
         // }
 
-        $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd, $studyProgress) {
-            $now = now();
-            $userId = $request->user()->id;
+        try {
+            $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd, $studyProgress) {
+                $now = now();
+                $userId = $request->user()->id;
 
-            ReviewLog::create([
-                'user_id' => $userId,
+                ReviewLog::create([
+                    'user_id' => $userId,
+                    'flashcard_id' => $flashcard->id,
+                    'score' => $validated['score'],
+                ]);
+
+                $previousCount = (int) ($studyProgress->review_count ?? 0);
+                $previousAverage = (float) ($studyProgress->average_score ?? 0);
+
+                $newCount = $previousCount + 1;
+                $newAverage = (($previousAverage * $previousCount) + $validated['score']) / $newCount;
+
+                $studyProgress->review_count = $newCount;
+                $studyProgress->average_score = round($newAverage, 2);
+                $studyProgress->last_reviewed_at = $now;
+                $studyProgress->next_review_due_at = $now->copy()->addDays($daysToAdd);
+
+                $studyProgress->save();
+
+                return $studyProgress;
+            });
+        } catch (\Throwable $e) {
+            Log::error('logReview failed', [
                 'flashcard_id' => $flashcard->id,
-                'score' => $validated['score'],
+                'user_id' => $request->user()->id,
+                'error' => $e->getMessage(),
+                'previous' => $e->getPrevious()?->getMessage(),
             ]);
-
-            $previousCount = (int) ($studyProgress->review_count ?? 0);
-            $previousAverage = (float) ($studyProgress->average_score ?? 0);
-
-            $newCount = $previousCount + 1;
-            $newAverage = (($previousAverage * $previousCount) + $validated['score']) / $newCount;
-
-            $studyProgress->review_count = $newCount;
-            $studyProgress->average_score = round($newAverage, 2);
-            $studyProgress->last_reviewed_at = $now;
-            $studyProgress->next_review_due_at = $now->copy()->addDays($daysToAdd);
-
-            $studyProgress->save();
-
-            return $studyProgress;
-        });
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Review logged and next due date calculated',
