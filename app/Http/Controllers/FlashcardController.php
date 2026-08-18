@@ -47,8 +47,8 @@ class FlashcardController extends Controller {
                 'cards' => [
                     ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
                     ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
-                ]
-            ], 200)
+                ],
+            ], 200),
         ]);
         // END LOCAL TESTING
 
