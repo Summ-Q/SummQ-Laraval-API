@@ -46,12 +46,12 @@ class StudyController extends Controller {
             ['review_count' => 0, 'average_score' => 0]
         );
 
-        // $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
-        $daysToAdd = $validated['score'] === 1 ? 1 : 3; // For now, just use a simple rule: 1 = 1 day, 4 = 3 days
+        $daysToAdd = $this->fetchReviewIntervalFromDS($studyProgress);
+        // $daysToAdd = $validated['score'] === 1 ? 1 : 3; // For now, just use a simple rule: 1 = 1 day, 4 = 3 days
 
-        // if ($daysToAdd === null) {
-        //     return response()->json(['message' => 'Failed to calculate next review interval from DS service.'], 502);
-        // }
+        if ($daysToAdd === null) {
+            return response()->json(['message' => 'Failed to calculate next review interval from DS service.', 'daysToAdd' => $daysToAdd], 502);
+        }
 
         try {
             $progress = DB::transaction(function () use ($request, $flashcard, $validated, $daysToAdd, $studyProgress) {
@@ -102,13 +102,12 @@ class StudyController extends Controller {
 
     private function fetchReviewIntervalFromDS(?StudyProgress $studyProgress = null): ?int {
         $apiUrlConfig = config('services.python_api.url');
-        $internalToken = config('services.python_api.internal_token');
 
-        if (! $apiUrlConfig || ! $internalToken) {
+        if (! $apiUrlConfig) {
             return null;
         }
 
-        $pythonApiUrl = rtrim($apiUrlConfig, '/').'/ds/review-interval';
+        $pythonApiUrl = rtrim($apiUrlConfig, '/').'/review-interval';
 
         $payload = [];
 
@@ -121,13 +120,12 @@ class StudyController extends Controller {
         }
 
         try {
-            $response = Http::withHeaders(['X-Internal-Token' => $internalToken])
-                ->acceptJson()
+            $response = Http::acceptJson()
                 ->timeout(20)
                 ->post($pythonApiUrl, $payload);
 
             if ($response->successful()) {
-                $apiDaysToAdd = $response->json('days_to_add');
+                $apiDaysToAdd = $response->json('result')['suggested_interval_days'] ?? null;
 
                 if (is_numeric($apiDaysToAdd) && (int) $apiDaysToAdd >= 0) {
                     return (int) $apiDaysToAdd;
