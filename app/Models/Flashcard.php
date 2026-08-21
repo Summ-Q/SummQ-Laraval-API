@@ -46,4 +46,13 @@ class Flashcard extends Model {
                     ->orWhere('study_progress.next_review_due_at', '<=', now());
             });
     }
+
+    public function scopeCountReviewedLast7Days(Builder $query, int $userId): Builder {
+        return $query->selectRaw('DATE(review_logs.created_at) as day, COUNT(review_logs.id) as count')
+            ->join('review_logs', 'flashcards.id', '=', 'review_logs.flashcard_id')
+            ->where('review_logs.user_id', $userId)
+            ->where('review_logs.created_at', '>=', now()->subDays(7))
+            ->groupBy('day')
+            ->orderBy('day');
+    }
 }
