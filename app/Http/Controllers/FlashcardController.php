@@ -37,8 +37,8 @@ class FlashcardController extends Controller {
             return response()->json(['message' => 'Either notes or a PDF file must be provided.'], 400);
         }
 
-        $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/ai/generate-cards';
-        $internalToken = config('services.python_api.internal_token');
+        $pythonApiUrl = rtrim(config('services.python_api.url'), '/').'/generate-flashcards';
+        // $internalToken = config('services.python_api.internal_token');
 
         // FOR LOCAL TESTING
         // Http::fake([
@@ -52,41 +52,40 @@ class FlashcardController extends Controller {
         // ]);
         // END LOCAL TESTING
 
-        // $pendingRequest = Http::withHeaders(['X-Internal-Token' => $internalToken])
-        //     ->acceptJson()
-        //     ->timeout(60); // AI generation might need up to 60 seconds
+        $pendingRequest = Http::acceptJson()->timeout(60); // AI generation might need up to 60 seconds
 
-        // try {
-        //     if ($request->hasFile('file')) {
-        //         $file = $request->file('file');
-        //         $response = $pendingRequest->attach(
-        //             'file',
-        //             fopen($file->path(), 'r'),
-        //             $file->getClientOriginalName()
-        //         )->post($pythonApiUrl);
-        //     } else {
-        //         $response = $pendingRequest->post($pythonApiUrl, [
-        //             'text' => $request->input('notes'),
-        //         ]);
-        //     }
-        // } catch (ConnectionException $e) {
-        //     return response()->json(['message' => 'AI generation service is currently unavailable.'], 503);
-        // }
+        try {
+            if ($request->hasFile('file')) {
+                $file = $request->file('file');
+                $response = $pendingRequest->attach(
+                    'file',
+                    fopen($file->path(), 'r'),
+                    $file->getClientOriginalName()
+                )->post($pythonApiUrl);
+            } else {
+                $response = $pendingRequest->asForm()->post($pythonApiUrl, [
+                    'text' => $request->input('notes'),
+                ]);
+            }
+        } catch (ConnectionException $e) {
+            return response()->json(['message' => 'AI generation service is currently unavailable.'], 503);
+        }
 
-        // if ($response->failed()) {
-        //     return response()->json(['message' => 'Failed to generate flashcards.'], 500);
-        // }
+        if ($response->failed()) {
+            return response()->json(['message' => 'Failed to generate flashcards.'], 500);
+        }
 
-        // $generatedCards = $response->json('cards');
+        $generatedCards = $response->json('data');
 
-        $generatedCards = [
-            ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
-            ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
-        ];
+        // $generatedCards = [
+        //     ['question' => 'Fake Question 1?', 'answer' => 'Fake Answer 1'],
+        //     ['question' => 'Fake Question 2?', 'answer' => 'Fake Answer 2'],
+        // ];
 
-        // if (! is_array($generatedCards)) {
-        //     return response()->json(['message' => 'Invalid response from AI service.'], 502);
-        // }
+        if (! is_array($generatedCards)) {
+            echo "Invalid response from AI service: " . $response->body();
+            return response()->json(['message' => 'Invalid response from AI service.'], 502);
+        }
 
         $createdCards = DB::transaction(function () use ($deck, $generatedCards) {
             $cards = [];
