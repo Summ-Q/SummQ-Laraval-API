@@ -137,4 +137,23 @@ class StudyController extends Controller {
 
         return null;
     }
+
+    public function getStudyPerformance(Request $request) {
+        $data = Flashcard::CountReviewedLast7Days($request->user()->id)->get();
+
+        $result = [];
+        for ($i = 6; $i >= 0; $i--) {
+            $date = now()->subDays($i)->format('Y-m-d');
+            $count = $data->firstWhere('day', $date)?->count ?? 0;
+            $result[] = [
+                'date' => $date,
+                'count' => $count,
+            ];
+        }
+
+        return response()->json([
+            'message' => 'Study performance data retrieved successfully.',
+            'data' => $result,
+        ], 200);
+    }
 }

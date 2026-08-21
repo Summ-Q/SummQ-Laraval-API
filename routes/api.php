@@ -32,4 +32,6 @@ Route::middleware('auth:sanctum')->group(function () {
 
     Route::get('/decks/{deck}/study', [StudyController::class, 'index']);
     Route::post('/reviews/{flashcard}', [StudyController::class, 'logReview'])->middleware('throttle:study-activity');
+
+    Route::get('/reviews/weekly-count', [StudyController::class, 'getStudyPerformance']);
 });
